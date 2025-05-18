@@ -1,0 +1,139 @@
+from google.adk.agents import Agent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.genai import types
+from IPython.display import display, Markdown
+import textwrap
+import warnings
+
+warnings.filterwarnings("ignore")
+
+
+# --- Função para chamar o agente ---
+def call_agent(agent: Agent, message_text: str) -> str:
+    session_service = InMemorySessionService()
+    session = session_service.create_session(app_name=agent.name, user_id="user1", session_id="session1")
+    runner = Runner(agent=agent, app_name=agent.name, session_service=session_service)
+    content = types.Content(role="user", parts=[types.Part(text=message_text)])
+
+    final_response = ""
+    for event in runner.run(user_id="user1", session_id="session1", new_message=content):
+        if event.is_final_response():
+            for part in event.content.parts:
+                if part.text is not None:
+                    final_response += part.text + "\n"
+    return final_response
+
+
+def to_markdown(text):
+    text = text.replace('•', '  *')
+    return Markdown(textwrap.indent(text, '> ', predicate=lambda _: True))
+
+
+# Lista das perguntas do Agente 1
+perguntas_entrevistador = [
+    "Qual é o nome da sua startup?",
+    "Qual o seu cargo/função na startup?",
+    "O que a sua startup faz?",
+    "Qual problema a startup resolve?",
+    "Quem é o cliente/usuário ideal?",
+    "Você já possui um MVP? Em que estágio está?",
+    "Você já tem usuários testando ou clientes reais?",
+    "Tem alguma métrica inicial ou validação?",
+    "Quantas pessoas estão na equipe e quais seus papéis?",
+    "Há lacunas importantes na equipe? Quais talentos ainda precisa?",
+    "A empresa está formalizada? Qual o tipo?",
+    "Possui contratos, acordos, NDAs?",
+    "Já recebeu investimento? Pretende captar em breve?",
+    "Prefere receber (A) resumo por tópicos ou (B) relatório completo?"
+]
+
+
+class PipelineAgentUp:
+    def __init__(self):
+        self.respostas = []
+        self.index_pergunta = 0
+
+        self.operacional = Agent(
+            name="agente_operacional",
+            model="gemini-2.0-flash",
+            instruction="""
+            Você é um líder operacional especialista. Com base nas respostas da entrevista, analise a estrutura atual da equipe,
+            identifique lacunas de habilidades em relação ao desenvolvimento do MVP e sugira papéis-chave que a equipe precisa
+            para progredir. Apresente a estrutura recomendada de equipe inicial num organograma geral da startup dele.
+            """,
+            description="Analisa e recomenda estrutura de equipe com base no MVP."
+        )
+
+        self.produto = Agent(
+            name="agente_produto",
+            model="gemini-2.0-flash",
+            instruction="""
+            Você é um líder de produto e especialista. A partir das informações coletadas na entrevista sobre o MVP,
+            analise e refine o escopo atual. Ajude a definir as funcionalidades essenciais 
+            para que o projeto siga uma passo a passo de sucesso,
+            objetivo, target user e fluxo inicial do MVP. 
+            Sugira também ferramentas low e no code se ele precisar de site ou app.
+            """,
+            description="Refina o escopo e objetivo do MVP da startup."
+        )
+
+        self.legal = Agent(
+            name="agente_legal",
+            model="gemini-2.0-flash",
+            instruction="""
+            Você é um especialista jurídico que auxilia startups no início da jornada, 
+            aborde assuntos como CNPJ e patente.
+            Com base nas respostas sobre equipe, contratos, formalização e estrutura legal, oriente o fundador sobre:
+            a importância de CNPJ, tipos de empresa, acordos de sócios, registros e contratos.
+            Gere uma lista de 5 próximos passos legais para a startup.
+            """,
+            description="Dá suporte legal inicial à estruturação da startup."
+        )
+
+    def proxima_pergunta(self):
+        if self.index_pergunta < len(perguntas_entrevistador):
+            pergunta = perguntas_entrevistador[self.index_pergunta]
+            self.index_pergunta += 1
+            return pergunta
+        else:
+            return None  # Perguntas finalizadas
+
+    def receber_resposta(self, resposta):
+        self.respostas.append(resposta.strip())
+
+    def respostas_concatenadas(self):
+        texto = ""
+        for i, resp in enumerate(self.respostas):
+            texto += f"{i+1}. {perguntas_entrevistador[i]}\n{resp}\n\n"
+        return texto.strip()
+
+    def gerar_analises(self):
+        respostas_texto = self.respostas_concatenadas()
+
+        op_response = call_agent(self.operacional, f"Respostas da entrevista:\n{respostas_texto}")
+        prod_response = call_agent(self.produto, f"Respostas da entrevista:\n{respostas_texto}")
+        legal_response = call_agent(self.legal, f"Respostas da entrevista:\n{respostas_texto}")
+
+        return op_response, prod_response, legal_response
+
+
+
+
+#--- Execução do pipeline AgentUp --- 
+
+def executar_pipeline_agentup():
+    print("🚀 Bem-vindo ao AgentUp - Diagnóstico Inicial de Startup 🚀")
+
+    print("\n--- 🧩 Iniciando com Agente 1: Entrevista Inicial ---")
+    respostas_entrevista = agente_entrevistador()
+    display(to_markdown(respostas_entrevista))
+
+    print("\n--- 🧩 Gerando Análises e Direcionamentos ---")
+    resultado_final = agente_analise_completa(respostas_entrevista)
+    display(to_markdown(resultado_final))
+
+    print("\n✅ Pipeline AgentUp concluído com sucesso!")
+
+# Executar o pipeline
+executar_pipeline_agentup()
