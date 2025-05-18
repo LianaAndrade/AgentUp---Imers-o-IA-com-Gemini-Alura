@@ -19,6 +19,6 @@ Requer uso do Google Colab
 > Requisitos:
 > - Conta Google
 > - Chave de API do Gemini ativada
-> - Permitir permissões de Google Docs (opcional)
+
 
 
